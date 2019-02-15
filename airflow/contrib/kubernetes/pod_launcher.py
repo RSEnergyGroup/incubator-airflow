@@ -92,17 +92,9 @@ class PodLauncher(LoggingMixin):
 
     def _monitor_pod(self, pod, get_logs):
         # type: (Pod, bool) -> (State, str)
-
-        if get_logs:
-            logs = self._client.read_namespaced_pod_log(
-                name=pod.name,
-                namespace=pod.namespace,
-                container='base',
-                follow=True,
-                tail_lines=10,
-                _preload_content=False)
-            for line in logs:
-                self.log.info(line)
+        #RSEG had trouble with this function running a datascience model on AKS where logs were not written for long
+        #periods of time. The rewrite fixing the issue
+        
         result = None
         if self.extract_xcom:
             while self.base_container_is_running(pod):
@@ -113,7 +105,22 @@ class PodLauncher(LoggingMixin):
             result = json.loads(result)
         while self.pod_is_running(pod):
             self.log.info('Pod %s has state %s', pod.name, State.RUNNING)
+            if get_logs:
+                try:
+                    logs = self._client.read_namespaced_pod_log(
+                        name=pod.name,
+                        namespace=pod.namespace,
+                        container='base',
+                        follow=True,
+                        tail_lines=10,
+                        limit_bytes = 56,
+                        _preload_content=False)
+
+                    self.log.info(logs.read())
+                except:
+                    self.log.info("Can not read namespace logs.")
             time.sleep(2)
+
         return self._task_status(self.read_pod(pod)), result
 
     def _task_status(self, event):
